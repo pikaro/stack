@@ -1,0 +1,19 @@
+#!/run/current-system/sw/bin/python3
+
+"""A simple task manager using stack semantics."""
+
+from __future__ import annotations
+
+import sys
+
+from lib.stack_app import StackApp
+from lib.viewer_app import ViewerApp
+
+if not sys.platform.startswith('darwin'):
+    _err = 'This application is only supported on macOS.'
+    raise RuntimeError(_err)
+
+
+if __name__ == '__main__':
+    app = ViewerApp() if 'view' in sys.argv else StackApp()
+    app.run()

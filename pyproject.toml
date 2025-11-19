@@ -1,0 +1,110 @@
+[project]
+name    = "stack"
+version = "0.0.1"
+
+[tool.poetry]
+package-mode = false
+
+[tool.poetry.dependencies]
+python        = ">=3.13.0,<3.14.0"
+customtkinter = "^5.2.2"
+
+[tool.pydoclint]
+style                       = "google"
+arg-type-hints-in-docstring = false
+check-return-types          = true
+check-yield-types           = true
+
+[tool.pyright]
+exclude                             = ["**/.venv", "**/__pycache__", "**/*.pyc", "workspace", "build", "dist"]
+venv                                = ".venv"
+venvPath                            = "."
+
+reportConstantRedefinition          = "error"
+reportDeprecated                    = "warning"
+reportImplicitStringConcatenation   = "warning"
+reportInconsistentConstructor       = "warning"
+reportMissingSuperCall              = "false"
+reportMissingTypeArgument           = "warning"
+reportPrivateUsage                  = "error"
+reportPropertyTypeMismatch          = "warning"
+reportShadowedImport                = "warning"
+reportUninitializedInstanceVariable = "warning"
+reportUnnecessaryCast               = "information"
+reportUnnecessaryComparison         = "information"
+reportUnnecessaryContains           = "information"
+reportUnnecessaryIsInstance         = "information"
+reportUntypedBaseClass              = "warning"
+reportUntypedClassDecorator         = "warning"
+reportUntypedFunctionDecorator      = "warning"
+reportUntypedNamedTuple             = "warning"
+reportUnusedCallResult              = "warning"
+reportUnusedExpression              = "warning"
+reportUnusedImport                  = "information"
+reportShadowedImports               = "warning"
+reportUnreachable                   = "information"
+
+[tool.ruff]
+exclude        = [".venv", "**/.venv", "workspace"]
+line-length    = 100
+indent-width   = 4
+target-version = "py313"
+src            = ["gdn"]
+
+[tool.ruff.lint]
+extend-select = [
+    "F",     # Pyflakes
+    "N",     # pep8 names
+    "I",     # isort
+    "UP",    # Pyupgrade
+    "E",     # Pycodestyle
+    "EM",    # flake8-errmsg
+    "W",     # Pycodestyle
+    "C4",    # flake8-comprehensions
+    "B",     # flake8-bugbear
+    "S",     # flake8-bandit
+    "EM",    # flake8-errmsg
+    "A",     # flake8-builtins
+    "C90",   # McCabe
+    "ASYNC", # flake8-async
+    "ICN",   # flake8-import-conventions
+    "PIE",   # flake8-pie
+    "SLF",   # flake8-self
+    "RSE",   # flake8-raise
+    "RET",   # flake8-return
+    "SIM",   # flake8-simplify
+    "TCH",   # flake8-type-checking
+    "TID",   # flake8-tidy-imports
+    "ARG",   # flake8-unused-arguments
+    "PTH",   # flake8-use-pathlib
+    "PL",    # Pylint
+    "TRY",   # Tryceratops
+    "RUF",   # RUFF
+    "FLY",   # FLYNT
+    "FURB",  # refurb
+    "D",    # Pydocstyle
+    #"TD",    # flake8-todo
+    #"FIX",   # flake8-fixme
+]
+ignore = [
+    # Covered by Pyright
+    "F821", # Unknown name
+    "F401", # Unused import
+    "S101", # Use of assert detected
+]
+
+[tool.ruff.lint.per-file-ignores]
+
+fixable   = ["ALL"]
+unfixable = []
+
+[tool.ruff.format]
+quote-style                = "single"
+indent-style               = "space"
+skip-magic-trailing-comma  = false
+line-ending                = "auto"
+docstring-code-format      = true
+docstring-code-line-length = "dynamic"
+
+[tool.ruff.pydocstyle]
+convention = "google"
