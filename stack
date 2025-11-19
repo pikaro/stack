@@ -6,14 +6,19 @@ from __future__ import annotations
 
 import sys
 
-from lib.stack_app import StackApp
-from lib.viewer_app import ViewerApp
-
 if not sys.platform.startswith('darwin'):
     _err = 'This application is only supported on macOS.'
     raise RuntimeError(_err)
 
 
 if __name__ == '__main__':
-    app = ViewerApp() if 'view' in sys.argv else StackApp()
+    if 'view' in sys.argv:
+        from lib.viewer_app import ViewerApp
+
+        app = ViewerApp()
+    else:
+        from lib.stack_app import StackApp
+
+        app = StackApp()
+
     app.run()
