@@ -32,11 +32,15 @@ def read_last_line(path: Path) -> str | None:
 
 def name_to_color(name: str) -> str:
     """Generate a consistent hex color code from a given name."""
-    digest = hashlib.md5(name.encode('utf-8')).hexdigest()  # noqa: S324
-    value = int(digest[:6], 16)
-    hue = (value % 360) / 360.0
-    sat = 0.5
-    val = 0.9
+    digest = hashlib.md5(name.encode('utf-8')).digest()  # noqa: S324
+    h_raw = int.from_bytes(digest[0:2], 'big')  # 0..65535
+    s_raw = digest[2]  # 0..255
+    v_raw = digest[3]  # 0..255
+
+    hue = (h_raw % 360) / 360.0
+    sat = 0.4 + 0.5 * (s_raw / 255.0)  # 0.4-0.9
+    val = 0.5 + 0.5 * (v_raw / 255.0)  # 0.5-1.0
+
     r, g, b = colorsys.hsv_to_rgb(hue, sat, val)
     rgb = (int(r * 255), int(g * 255), int(b * 255))
     return f'#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}'
