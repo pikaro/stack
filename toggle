@@ -1,0 +1,10 @@
+#!/bin/bash
+
+set -eEuo pipefail
+
+RET="$(echo toggle | socat - UNIX-CONNECT:${HOME}/.local/share/stack/control.sock)"
+
+if [ ! "${RET}" = "OK" ]; then
+    echo "Error: ${RET}" >&2
+    exit 1
+fi

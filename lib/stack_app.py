@@ -1,7 +1,10 @@
 """UI."""
 
 import customtkinter as tk
-from lib.focus_manager import FocusManager
+from lib.control_socket import ControlSocket
+from lib.data import CONTROL_SOCKET
+from lib.focus_manager_cocoa import FocusManagerCocoa
+from lib.protocols.focus_manager import FocusManager
 from lib.stack_manager import StackManager
 from lib.types import Stack, StackView, Task
 from lib.utils import name_to_color
@@ -11,29 +14,89 @@ class StackApp:
     """The main Stack application UI."""
 
     focus_manager: FocusManager
+    _socket: ControlSocket
+    _highlighted_view: StackView | None
 
     INDENT_WIDTH = 20
 
     def __init__(self) -> None:
         """Initialize the StackApp with the given StackManager."""
-        self.focus_manager = FocusManager()
-        self.focus_manager.capture_front_app()
-
         self.manager = StackManager()
         self.manager.start()
         self.manager.ensure_default_stack()
 
-        self.focus_manager.wait()
+        self._socket = ControlSocket(CONTROL_SOCKET)
+        self._socket.register('toggle', self._toggle)
+        self._socket.register('quit', self._quit)
+        self._socket.start()
+
         self.app = tk.CTk()
         self.app.title('Stack Manager')
+        self.app.withdraw()
+
+        self.focus_manager = FocusManagerCocoa()
+        self.focus_manager.start()
+        self.focus_manager.capture_front_app()
 
         self.stack_views: list[StackView] = []
         self.selected_index = 0
         self.show_completed = False
-        self.quit_scheduled = False
+        self.hide_scheduled = False
+
+        self._highlighted_view = None
 
         self._build_stack_views()
         self._setup_bindings()
+
+        self.show()
+
+    # ----- Hide/unhide logic -----
+
+    def _visible(self) -> bool:
+        return bool(self.app.winfo_viewable())
+
+    def _toggle(self) -> bool:
+        print('Toggling app visibility')
+        if self._visible():
+            self.hide()
+        else:
+            self.show()
+        return True
+
+    def show(self) -> None:
+        """Show the application window."""
+        print('Showing app')
+        self.focus_manager.capture_front_app()
+        self.app.deiconify()
+        self.app.lift()
+        self.app.focus_force()
+        if self.stack_views:
+            self.stack_views[self.selected_index].entry_widget.focus_set()
+
+    def hide(self) -> None:
+        """Hide the application window."""
+        print('Hiding app')
+        self.app.withdraw()
+        if self._highlighted_view is not None:
+            self._rerender_stack_entries(self._highlighted_view)
+            self._highlighted_view = None
+        self.focus_manager.restore_front_app()
+        self.hide_scheduled = False
+
+    def _quit(self) -> bool:
+        self.manager.save()
+        self.app.quit()
+        self.focus_manager.restore_front_app()
+        return True
+
+    def _schedule_hide(self, delay: int = 0) -> None:
+        print('Scheduling hide...')
+        if self.hide_scheduled:
+            return
+        self.hide_scheduled = True
+        self.manager.save()
+        _ = self.app.after(delay, self.hide)
+        print('Scheduled hide in', delay, 'ms')
 
     # ----- UI construction -----
 
@@ -105,16 +168,15 @@ class StackApp:
         )
         entry_widget.bind(
             '<Control-Return>',
-            lambda _event, sv=view: self._on_enter(sv, with_quit=False),
+            lambda _event, sv=view: self._on_enter(sv, with_hide=False),
         )
-        entry_widget.bind('<Escape>', lambda _event: self._schedule_quit())
         entry_widget.bind(
             '<Left>',
             lambda _event, sv=view: self._finish_last_task_ui(sv),
         )
         entry_widget.bind(
             '<Control-Left>',
-            lambda _event, sv=view: self._finish_last_task_ui(sv, with_quit=False),
+            lambda _event, sv=view: self._finish_last_task_ui(sv, with_hide=False),
         )
 
     def _setup_bindings(self) -> None:
@@ -123,16 +185,17 @@ class StackApp:
         _ = self.app.bind('<Control-a>', self._toggle_show_completed)
         _ = self.app.bind('<Control-r>', self._start_rename_current_stack)
         _ = self.app.bind('<Control-t>', self._start_edit_tag)
-        _ = self.app.bind('<Escape>', lambda _event: self._schedule_quit())
         _ = self.app.bind('<Control-Up>', self._on_ctrl_up)
         _ = self.app.bind('<Control-Down>', self._on_ctrl_down)
         _ = self.app.bind('<Control-e>', lambda _event: self._end())
+        _ = self.app.bind('<Escape>', lambda _event: self.hide())
+        _ = self.app.bind('<Control-Escape>', lambda _event: self._quit())
         _ = self.app.protocol('WM_DELETE_WINDOW', self.manager.save)
 
     def _end(self) -> None:
         self.app.iconify()
         self.manager.end()
-        self._schedule_quit(500)
+        self._schedule_hide(500)
 
     # ----- Selection handling -----
 
@@ -160,16 +223,6 @@ class StackApp:
         new_index = max(0, min(new_index, len(self.stack_views) - 1))
         self.selected_index = new_index
         self._update_stack_selection()
-
-    # ----- Quit handling -----
-
-    def _schedule_quit(self, delay: int = 0) -> None:
-        if self.quit_scheduled:
-            return
-        self.quit_scheduled = True
-        self.manager.save()
-        self.focus_manager.restore_front_app()
-        _ = self.app.after(delay, self.app.quit)
 
     # ----- Tag color / badge -----
 
@@ -327,13 +380,13 @@ class StackApp:
 
     # ----- Actions -----
 
-    def _on_enter(self, view: StackView, with_quit: bool = True) -> None:
+    def _on_enter(self, view: StackView, with_hide: bool = True) -> None:
         text = view.entry_widget.get()
         if text.strip() == '':
             task = view.stack.focused_task()
             if self.manager and task and self.manager.last_switch_target != task.id:
                 self.manager.switch(task.id)
-            self._schedule_quit()
+            self.hide()
             return
 
         parent: Task | None = None
@@ -350,17 +403,18 @@ class StackApp:
         view.entry_widget.delete(0, 'end')
         self._rerender_stack_entries(
             view,
-            with_entry=not with_quit,
+            with_entry=not with_hide,
             highlight_task_id=task.id,
             highlight_color='green',
         )
-        if with_quit:
-            self._schedule_quit(500)
+        self._highlighted_view = view
+        if with_hide:
+            self._schedule_hide(500)
 
-    def _finish_last_task_ui(self, view: StackView, with_quit: bool = True) -> None:
+    def _finish_last_task_ui(self, view: StackView, with_hide: bool = True) -> None:
         task_id = view.stack.entry_parent_task_id
         if task_id is None:
-            self._schedule_quit()
+            self.hide()
             return
         task = view.stack.find_task_by_id(task_id)
         if task is None or (task.children and any(c.finished_at is None for c in task.children)):
@@ -372,13 +426,14 @@ class StackApp:
 
         self._rerender_stack_entries(
             view,
-            with_entry=not with_quit,
+            with_entry=not with_hide,
             highlight_task_id=task.id,
             highlight_color='red',
         )
+        self._highlighted_view = view
 
-        if with_quit:
-            self._schedule_quit(500)
+        if with_hide:
+            self._schedule_hide(500)
 
     # ----- Folding -----
 
@@ -536,7 +591,9 @@ class StackApp:
         Ctrl-Up: direction = -1
         Ctrl-Down: direction = +1
 
-        On first/last task this is a no-op.
+        Positions:
+            -1     -> root level (entry_parent_task_id = None)
+            0..n-1 -> tasks in view.task_order
         """
         if not self.stack_views:
             return
@@ -549,28 +606,34 @@ class StackApp:
         stack = view.stack
         current_id = stack.entry_parent_task_id
 
-        # Find current index in visible order
-        idx = None
-        if current_id is not None:
+        # Map current position to a linear index
+        if current_id is None:
+            # Root level
+            pos = -1
+        else:
+            pos = -1
             for i, (task, _depth) in enumerate(tasks):
                 if task.id == current_id:
-                    idx = i
+                    pos = i
                     break
+            # If current parent is not visible for some reason, snap to last task
+            if pos == -1:
+                pos = len(tasks) - 1
 
-        # Default if current parent is not visible: snap to last task
-        if idx is None:
-            idx = len(tasks) - 1
+        new_pos = pos + direction
 
-        # Boundary: no-op at first/last
-        if (direction < 0 and idx == 0) or (direction > 0 and idx == len(tasks) - 1):
+        # Clamp to valid range: [-1, len(tasks)-1]
+        if new_pos < -1 or new_pos >= len(tasks):
             return
 
-        new_idx = idx + direction
-        if new_idx < 0 or new_idx >= len(tasks):
-            return
+        # Map back from position to entry_parent_task_id
+        if new_pos == -1:
+            # Root level
+            stack.entry_parent_task_id = None
+        else:
+            new_task = tasks[new_pos][0]
+            stack.entry_parent_task_id = new_task.id
 
-        new_task = tasks[new_idx][0]
-        stack.entry_parent_task_id = new_task.id
         self.manager.make_dirty()
         self.manager.save()
         self._rerender_stack_entries(view)

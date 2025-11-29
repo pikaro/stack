@@ -4,29 +4,29 @@ import subprocess
 import threading
 
 
-class FocusManager:
+class FocusManagerOSAScript:
     """Manage focus on macOS to restore the previously focused app after quitting."""
 
-    app_name: str | None
+    _app_name: str | None
     _thread: threading.Thread
 
     def __init__(self) -> None:
         """Initialize the FocusManager."""
-        self.app_name: str | None = None
+        self._app_name: str | None = None
         self._thread = threading.Thread(target=self._get_front_app_name, args=(), daemon=True)
 
     def capture_front_app(self) -> None:
         """Capture the name of the currently frontmost application on macOS."""
         self._thread.start()
 
-    def wait(self) -> None:
+    def start(self) -> None:
         """Wait for the front app capture thread to finish."""
         self._thread.join()
 
     def restore_front_app(self) -> None:
         """Restore focus to the previously frontmost application on macOS."""
-        if self.app_name:
-            self._activate_app(self.app_name)
+        if self._app_name:
+            self._activate_app(self._app_name)
 
     def _run_osascript(self, script: str) -> str:
         """Run the given AppleScript and return its output as a string."""
@@ -46,7 +46,7 @@ class FocusManager:
             return name of frontApp
         end tell
         """
-        self.app_name = self._run_osascript(script)
+        self._app_name = self._run_osascript(script)
 
     def _activate_app(self, name: str) -> None:
         """Activate the application with the given name on macOS."""
